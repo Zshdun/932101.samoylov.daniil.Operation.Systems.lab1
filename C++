@@ -1,0 +1,44 @@
+#include <iostream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+
+std::mutex mtx;
+std::condition_variable cv;
+std::queue<int> messages;
+
+void sender() {
+    for (int i = 0; i < 10; ++i) {
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            messages.push(i);
+            std::cout << "Sent message: " << i << std::endl;
+        }
+        cv.notify_one(); // Notify the receiver that a new message is available
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Simulate some work
+    }
+}
+
+void receiver() {
+    for (int i = 0; i < 10; ++i) {
+        std::unique_lock<std::mutex> lock(mtx);
+        cv.wait(lock, [] { return !messages.empty(); }); // Wait until a message is available
+
+        int message = messages.front();
+        messages.pop();
+        lock.unlock();
+
+        std::cout << "Received message: " << message << std::endl;
+    }
+}
+
+int main() {
+    std::thread senderThread(sender);
+    std::thread receiverThread(receiver);
+
+    senderThread.join();
+    receiverThread.join();
+
+    return 0;
+}
