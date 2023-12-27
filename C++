@@ -1,0 +1,65 @@
+#include <iostream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <string>
+
+std::mutex mtx;
+std::condition_variable cv;
+std::queue<std::string> messages;
+
+void sender() {
+    while (true) {
+        std::string message;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::cout << "Enter a message (or 'exit' to quit): ";
+        std::getline(std::cin, message);
+
+        if (message == "exit") {
+            { 
+                std::lock_guard<std::mutex> lock(mtx);
+                messages.push("exit");
+            }
+            cv.notify_one();
+            break; 
+        }
+        else {
+            { 
+                std::lock_guard<std::mutex> lock(mtx);
+                messages.push(message);
+                std::cout << "Sent message: " << message << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+            cv.notify_one(); 
+        }
+    }
+}
+
+void receiver() {
+    while (true) {
+        std::unique_lock<std::mutex> lock(mtx);
+        cv.wait(lock, [] { return !messages.empty(); });
+
+        std::string message = messages.front();
+        messages.pop();
+
+        if (message == "exit") {
+            std::cout << "Exiting receiver..." << std::endl;
+            break; 
+        }
+        else {
+            std::cout << "Received message: " << message << std::endl;
+        }
+    }
+}
+
+int main() {
+    std::thread senderThread(sender);
+    std::thread receiverThread(receiver);
+
+    senderThread.join();
+    receiverThread.join();
+
+    return 0;
+}
